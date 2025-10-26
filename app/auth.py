@@ -8,7 +8,6 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from functools import lru_cache
 from .config import settings
 
-# DEV BYPASS: якщо AUTH_DISABLED = true у .env — повертаємо тестовий payload і пропускаємо require_role
 if getattr(settings, "AUTH_DISABLED", False):
     def get_current_user_dummy(*args, **kwargs):
         return {
@@ -19,7 +18,6 @@ if getattr(settings, "AUTH_DISABLED", False):
         }
 
     def get_current_user(credentials=None):
-        # returns the dummy payload used by require_role
         return get_current_user_dummy()
 
     def require_role(role: str):
