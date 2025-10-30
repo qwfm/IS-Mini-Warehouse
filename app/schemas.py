@@ -209,3 +209,10 @@ class StockCurrentResponse(BaseModel):
     last_updated: datetime
     
     model_config = ConfigDict(from_attributes=True)
+    
+class IssueUpdate(BaseModel):
+    document_number: Optional[str] = Field(None, max_length=100)
+    client_id: Optional[int] = None
+    currency: Optional[str] = Field(None, max_length=3)
+    notes: Optional[str] = None
+    items: Optional[list[IssueItemCreate]] = None

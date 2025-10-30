@@ -64,7 +64,7 @@ def update_material(
     db: Session = Depends(get_db),
     _: dict = Depends(require_role("storekeeper"))
 ):
-    """Оновити матеріал (storekeeper+)"""
+    """Оновити матеріал (storekeeper)"""
     material = db.query(Material).filter(Material.id == id).first()
     if not material:
         raise HTTPException(status_code=404, detail="Material not found")

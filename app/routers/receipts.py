@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from decimal import Decimal, ROUND_HALF_UP
 from typing import List
 
@@ -30,7 +30,7 @@ def create_receipt(
     user: dict = Depends(get_current_user),
     _: dict = Depends(require_role("storekeeper"))
 ):
-    """Створити надходження товару (storekeeper+)"""
+    """Створити надходження товару (storekeeper)"""
     if not data.items:
         raise HTTPException(status_code=400, detail="No items provided")
 
@@ -120,16 +120,77 @@ def get_receipt(id: int, db: Session = Depends(get_db)):
     return receipt
 
 
-@router.delete("/{id}", status_code=204)
-def delete_receipt(
-    id: int,
-    db: Session = Depends(get_db),
-    _: dict = Depends(require_role("admin"))
-):
-    """Видалити надходження (тільки admin)"""
-    receipt = db.query(Receipt).filter(Receipt.id == id).first()
-    if not receipt:
+@router.put("/{id}", response_model=ReceiptResponse)
+def update_receipt(id: int, data: ReceiptCreate, db: Session = Depends(get_db), _: dict = Depends(require_role("storekeeper"))):
+    """Повне редагування: шапка + items. Перераховуємо total і робимо Δ до складу/журналу."""
+    rec = db.query(Receipt).options(joinedload(Receipt.items)).filter(Receipt.id == id).first()
+    if not rec:
         raise HTTPException(status_code=404, detail="Receipt not found")
-    db.delete(receipt)
-    db.commit()
+    if not data.items:
+        raise HTTPException(status_code=400, detail="No items provided")
+
+    try:
+        # 1) повертаємо старі позиції назад на склад (відкочуємо)
+        for old in rec.items:
+            stock = db.query(StockCurrent).filter_by(warehouse_id=old.warehouse_id, material_id=old.material_id).with_for_update().first()
+            if stock:
+                stock.quantity = (stock.quantity - old.qty).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+            db.add(StockLedger(
+                warehouse_id=old.warehouse_id, material_id=old.material_id,
+                movement_type=StockMovementType.adjustment,  # фіксуємо як технічне коригування
+                qty_change=-old.qty, unit_price=old.unit_price, currency=old.currency,
+                total_price=-(old.total_price), reference_doc_type="ReceiptEdit", reference_doc_id=rec.id,
+                remarks="Revert old items before edit"
+            ))
+        rec.items.clear(); db.flush()
+
+        # 2) заповнюємо новими позиціями і знову додаємо на склад
+        rec.document_number = data.document_number
+        rec.supplier_id = data.supplier_id
+        rec.currency = data.currency
+        rec.notes = data.notes
+        rec.total_amount = Decimal("0.00")
+
+        for it in data.items:
+            qty = to_decimal(it.qty, "0.0001")
+            up  = to_decimal(it.unit_price, "0.01")
+            line = (qty * up).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+            db.add(ReceiptItem(
+                receipt_id=rec.id, material_id=it.material_id, warehouse_id=it.warehouse_id,
+                qty=qty, unit_price=up, currency=it.currency, total_price=line, weight=it.weight, notes=it.notes
+            ))
+            rec.total_amount += line
+
+            stock = db.query(StockCurrent).filter_by(warehouse_id=it.warehouse_id, material_id=it.material_id).with_for_update().first()
+            if stock: stock.quantity = (stock.quantity + qty).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+            else: db.add(StockCurrent(warehouse_id=it.warehouse_id, material_id=it.material_id, quantity=qty, reserved_quantity=Decimal("0.0000")))
+
+            db.add(StockLedger(
+                warehouse_id=it.warehouse_id, material_id=it.material_id,
+                movement_type=StockMovementType.receipt, qty_change=qty, unit_price=up, currency=it.currency,
+                total_price=line, reference_doc_type="ReceiptEdit", reference_doc_id=rec.id,
+                remarks="Apply new items after edit"
+            ))
+        db.commit(); db.refresh(rec)
+        return rec
+    except:
+        db.rollback(); raise
+
+@router.delete("/{id}", status_code=204)
+def delete_receipt(id: int, db: Session = Depends(get_db), _: dict = Depends(require_role("admin"))):
+    rec = db.query(Receipt).options(joinedload(Receipt.items)).filter(Receipt.id == id).first()
+    if not rec:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    for it in rec.items:
+        stock = db.query(StockCurrent).filter_by(warehouse_id=it.warehouse_id, material_id=it.material_id).with_for_update().first()
+        if stock:
+            stock.quantity = (stock.quantity - it.qty).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+        db.add(StockLedger(
+            warehouse_id=it.warehouse_id, material_id=it.material_id,
+            movement_type=StockMovementType.adjustment, qty_change=-it.qty,
+            unit_price=it.unit_price, currency=it.currency, total_price=-(it.total_price),
+            reference_doc_type="ReceiptDelete", reference_doc_id=rec.id, remarks="Delete receipt"
+        ))
+    db.delete(rec); db.commit()
     return None

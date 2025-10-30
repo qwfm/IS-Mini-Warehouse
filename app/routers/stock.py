@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
-
+from pydantic import BaseModel, Field
+from decimal import Decimal, ROUND_HALF_UP
+from ..models import StockCurrent, StockLedger, StockMovementType
+from ..utils import to_decimal
+from ..auth import require_role
 from ..db import get_db
-from ..models import StockCurrent
 from ..schemas import StockCurrentResponse
 
 router = APIRouter(prefix="/api/stock", tags=["Stock & Reports"])
@@ -60,3 +63,53 @@ def get_low_stock(db: Session = Depends(get_db)):
         }
         for row in result
     ]
+
+class StockAdjustBody(BaseModel):
+    warehouse_id: int
+    material_id: int
+    qty_delta: Decimal = Field(..., description="Плюс або мінус")
+    unit_price: Optional[Decimal] = None
+    currency: Optional[str] = "UAH"
+    remarks: Optional[str] = None
+
+@router.post("/adjust")
+def adjust_stock(
+    body: StockAdjustBody,
+    db: Session = Depends(get_db),
+    _: dict = Depends(require_role("storekeeper"))
+):
+    stock = db.query(StockCurrent).filter_by(
+        warehouse_id=body.warehouse_id,
+        material_id=body.material_id
+    ).with_for_update().first()
+
+    if not stock:
+        # створимо запис для матеріалу на складі, якщо треба
+        stock = StockCurrent(
+            warehouse_id=body.warehouse_id,
+            material_id=body.material_id,
+            quantity=Decimal("0"),
+            reserved_quantity=Decimal("0"),
+        )
+        db.add(stock)
+        db.flush()
+
+    qty_delta = to_decimal(body.qty_delta, "0.0001")
+    stock.quantity = (stock.quantity + qty_delta).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+
+    ledger = StockLedger(
+        warehouse_id=body.warehouse_id,
+        material_id=body.material_id,
+        movement_type=StockMovementType.adjustment,
+        qty_change=qty_delta,
+        unit_price=body.unit_price,
+        currency=body.currency,
+        total_price=(qty_delta * (body.unit_price or Decimal("0"))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) if body.unit_price else None,
+        reference_doc_type="Adjustment",
+        reference_doc_id=None,
+        remarks=body.remarks or "Manual adjustment"
+    )
+    db.add(ledger)
+
+    db.commit()
+    return {"ok": True}

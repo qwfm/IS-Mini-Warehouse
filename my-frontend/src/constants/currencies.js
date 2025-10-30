@@ -1,0 +1,18 @@
+export const CURRENCIES = [
+  { code: "UAH", name: "Ukrainian hryvnia" },
+  { code: "USD", name: "US dollar" },
+  { code: "EUR", name: "Euro" },
+  { code: "PLN", name: "Polish zloty" },
+  { code: "GBP", name: "Pound sterling" },
+  { code: "CHF", name: "Swiss franc" },
+  { code: "CZK", name: "Czech koruna" },
+  { code: "HUF", name: "Hungarian forint" },
+  { code: "RON", name: "Romanian leu" },
+  { code: "TRY", name: "Turkish lira" },
+  { code: "SEK", name: "Swedish krona" },
+  { code: "NOK", name: "Norwegian krone" },
+  { code: "JPY", name: "Japanese yen" },
+  { code: "CNY", name: "Chinese yuan" },
+  { code: "AUD", name: "Australian dollar" },
+  { code: "CAD", name: "Canadian dollar" },
+];

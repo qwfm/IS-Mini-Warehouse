@@ -24,9 +24,7 @@ if getattr(settings, "AUTH_DISABLED", False):
         def _role_checker(payload = None):
             return get_current_user_dummy()
         return _role_checker
-
-'''
-
+    
 auth_scheme = HTTPBearer()
 
 @lru_cache()
@@ -86,5 +84,3 @@ def require_role(role: str):
             raise HTTPException(status_code=403, detail="Insufficient role")
         return payload
     return role_checker
-    
-'''
