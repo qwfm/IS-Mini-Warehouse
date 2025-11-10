@@ -23,7 +23,6 @@ export default function CategoriesPage() {
   useEffect(() => {
     (async () => {
       await load();
-      // дозвіл або по ролі admin, або по scope write:categories
       setCanWrite( (await hasRole("admin")) || (await hasPerm("write:categories")) );
     })();
   }, []);
@@ -33,57 +32,136 @@ export default function CategoriesPage() {
     if (!form.name.trim()) return;
 
     if (editing) {
-      await api.put(`/api/categories/${form.id}`, { name: form.name, description: form.description || null });
+      await api.put(`/api/categories/${form.id}`, { 
+        name: form.name, 
+        description: form.description || null 
+      });
     } else {
-      await api.post("/api/categories", { name: form.name, description: form.description || null });
+      await api.post("/api/categories", { 
+        name: form.name, 
+        description: form.description || null 
+      });
     }
     setForm({ id:null, name:"", description:"" });
     await load();
   };
 
-  const startEdit = (row) => setForm({ id: row.id, name: row.name, description: row.description ?? "" });
+  const startEdit = (row) => setForm({ 
+    id: row.id, 
+    name: row.name, 
+    description: row.description ?? "" 
+  });
+  
   const cancel = () => setForm({ id:null, name:"", description:"" });
-  const remove = async (id) => { if (confirm("Delete?")) { await api.del(`/api/categories/${id}`); await load(); }};
+  
+  const remove = async (id) => { 
+    if (confirm("Delete this category?")) { 
+      await api.del(`/api/categories/${id}`); 
+      await load(); 
+    }
+  };
 
   return (
-    <div style={{padding:16, maxWidth:800}}>
-      <h2>Categories</h2>
+    <div className="space-y-6">
+      <div className="page-header">
+        <h1 className="page-title">Categories</h1>
+        <p className="text-slate-600 mt-1">Manage material categories</p>
+      </div>
 
-      {loading ? <p>Loading…</p> : (
-        <>
-          {canWrite && (
-            <form onSubmit={submit} style={{display:"grid", gap:8, marginBottom:16}}>
-              <input placeholder="Name" value={form.name} onChange={e=>setForm({...form, name:e.target.value})}/>
-              <textarea placeholder="Description" value={form.description} onChange={e=>setForm({...form, description:e.target.value})}/>
-              <div style={{display:"flex", gap:8}}>
-                <button type="submit">{editing ? "Save" : "Create"}</button>
-                {editing && <button type="button" onClick={cancel}>Cancel</button>}
+      {canWrite && (
+        <div className="card">
+          <h3 className="text-lg font-semibold mb-4">
+            {editing ? "Edit Category" : "Create New Category"}
+          </h3>
+          <form onSubmit={submit} className="space-y-4">
+            <div className="form-grid-2">
+              <div className="field">
+                <label className="label">Name *</label>
+                <input 
+                  placeholder="Category name" 
+                  value={form.name} 
+                  onChange={e=>setForm({...form, name:e.target.value})}
+                  required
+                />
               </div>
-            </form>
-          )}
+              <div className="field">
+                <label className="label">Description</label>
+                <input 
+                  placeholder="Optional description" 
+                  value={form.description} 
+                  onChange={e=>setForm({...form, description:e.target.value})}
+                />
+              </div>
+            </div>
+            <div className="toolbar justify-end">
+              {editing && (
+                <button type="button" onClick={cancel} className="btn">
+                  Cancel
+                </button>
+              )}
+              <button type="submit" className="btn-primary">
+                {editing ? "Save Changes" : "Create Category"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
-          <table width="100%" cellPadding="6" style={{borderCollapse:"collapse"}}>
-            <thead>
-              <tr><th align="left">Name</th><th align="left">Description</th><th/></tr>
-            </thead>
-            <tbody>
-              {rows.map(r=>(
-                <tr key={r.id} style={{borderTop:"1px solid #ddd"}}>
-                  <td>{r.name}</td>
-                  <td>{r.description}</td>
-                  <td align="right" style={{whiteSpace:"nowrap"}}>
-                    {canWrite && <>
-                      <button onClick={()=>startEdit(r)}>Edit</button>{" "}
-                      <button onClick={()=>remove(r.id)}>Delete</button>
-                    </>}
-                  </td>
+      {loading ? (
+        <div className="card text-center py-8">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-sky-600"></div>
+          <p className="mt-4 text-slate-600">Loading categories...</p>
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="card text-center py-12">
+          <p className="text-slate-600">No categories yet</p>
+          {canWrite && (
+            <p className="text-sm text-slate-500 mt-2">
+              Create your first category above
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="card">
+          <div className="table-container">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Description</th>
+                  <th className="text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
+              </thead>
+              <tbody>
+                {rows.map(r=>(
+                  <tr key={r.id}>
+                    <td className="font-medium">{r.name}</td>
+                    <td className="text-slate-600">{r.description || "—"}</td>
+                    <td>
+                      {canWrite && (
+                        <div className="flex justify-end gap-2">
+                          <button 
+                            onClick={()=>startEdit(r)} 
+                            className="btn btn-sm"
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            onClick={()=>remove(r.id)} 
+                            className="btn-danger btn-sm"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </div>
   );
 }
-

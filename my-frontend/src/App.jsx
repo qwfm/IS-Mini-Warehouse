@@ -1,4 +1,4 @@
-import { Routes, Route, Link } from "react-router-dom";
+import { Routes, Route, Link, useLocation } from "react-router-dom";
 import { useAuth0 } from "@auth0/auth0-react";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CategoriesPage from "./pages/CategoriesPage";
@@ -10,51 +10,117 @@ import ReceiptsPage from "./pages/ReceiptsPage";
 import IssuesPage from "./pages/IssuesPage";
 import StockPage from "./pages/StockPage";
 import LedgerPage from "./pages/LedgerPage";
-import UserSync from "./components/UserSync";
+import DashboardPage from "./pages/DashboardPage";
 
+function NavLink({ to, children }) {
+  const location = useLocation();
+  const isActive = location.pathname === to;
+  
+  return (
+    <Link
+      to={to}
+      className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+        isActive
+          ? "bg-sky-100 text-sky-700"
+          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+      }`}
+    >
+      {children}
+    </Link>
+  );
+}
 
 function Shell({ children }) {
+  const { isAuthenticated, logout, user } = useAuth0();
+
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="sticky top-0 z-10 border-b bg-white/90 backdrop-blur">
-        <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-          <Link to="/" className="text-lg font-semibold">Mini Warehouse</Link>
-          <nav className="flex gap-4 text-sm">
-            <Link className="hover:text-sky-700" to="/categories">Categories</Link>
-            <Link className="hover:text-sky-700" to="/materials">Materials</Link>
-            <Link className="hover:text-sky-700" to="/warehouses">Warehouses</Link>
-            <Link className="hover:text-sky-700" to="/clients">Clients</Link>
-            <Link className="hover:text-sky-700" to="/suppliers">Suppliers</Link>
-            <Link className="hover:text-sky-700" to="/receipts">Receipts</Link>
-            <Link className="hover:text-sky-700" to="/issues">Issues</Link>
-            <Link className="hover:text-sky-700" to="/stock">Stock</Link>
-            <Link className="hover:text-sky-700" to="/stock-ledger">Stock Ledger</Link>
-          </nav>
+      <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-sm">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-8">
+              <Link to="/" className="text-xl font-bold text-sky-600">
+                📦 Mini Warehouse
+              </Link>
+              
+              {isAuthenticated && (
+                <nav className="hidden md:flex items-center gap-1">
+                  <NavLink to="/categories">Categories</NavLink>
+                  <NavLink to="/materials">Materials</NavLink>
+                  <NavLink to="/warehouses">Warehouses</NavLink>
+                  <NavLink to="/suppliers">Suppliers</NavLink>
+                  <NavLink to="/clients">Clients</NavLink>
+                  <NavLink to="/receipts">Receipts</NavLink>
+                  <NavLink to="/issues">Issues</NavLink>
+                  <NavLink to="/stock">Stock</NavLink>
+                  <NavLink to="/stock-ledger">Ledger</NavLink>
+                  <NavLink to="/dashboard">Analysis Dashboard</NavLink>
+                </nav>
+              )}
+            </div>
+
+            {isAuthenticated && (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-slate-600 hidden sm:block">
+                  {user?.email}
+                </span>
+                <button
+                  onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
+                  className="btn btn-sm"
+                >
+                  Log out
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+      
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+        {children}
+      </main>
     </div>
   );
 }
 
 function Home() {
-  const { isAuthenticated, loginWithRedirect, logout, user } = useAuth0();
+  const { isAuthenticated, loginWithRedirect, user } = useAuth0();
+  
   return (
-    <div className="card">
-      <h1 className="text-xl font-semibold mb-2">Mini Warehouse UI</h1>
-      <div className="toolbar">
+    <div className="max-w-2xl mx-auto text-center py-12">
+      <div className="card space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 mb-2">
+            Welcome to Mini Warehouse
+          </h1>
+          <p className="text-slate-600">
+            Your complete warehouse management solution
+          </p>
+        </div>
+
         {!isAuthenticated ? (
-          <button className="btn btn-primary" onClick={() => loginWithRedirect()}>Log in</button>
-        ) : (
-          <>
-            <span className="text-sm text-slate-700">Hi, {user?.email}</span>
-            <button
-              className="btn"
-              onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
+          <div className="space-y-4">
+            <p className="text-slate-600">
+              Please log in to access the system
+            </p>
+            <button 
+              onClick={() => loginWithRedirect()} 
+              className="btn-primary"
             >
-              Log out
+              Log in
             </button>
-          </>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="p-4 bg-sky-50 border border-sky-200 rounded-lg">
+              <p className="text-sky-900">
+                Welcome back, <strong>{user?.email}</strong>!
+              </p>
+            </div>
+            <p className="text-slate-600">
+              Use the navigation above to manage your warehouse
+            </p>
+          </div>
         )}
       </div>
     </div>
@@ -66,15 +132,16 @@ export default function App() {
     <Shell>
       <Routes>
         <Route path="/" element={<Home/>} />
-        <Route path="/categories"  element={<ProtectedRoute><CategoriesPage/></ProtectedRoute>} />
-        <Route path="/materials"   element={<ProtectedRoute><MaterialsPage/></ProtectedRoute>} />
-        <Route path="/receipts"    element={<ProtectedRoute><ReceiptsPage/></ProtectedRoute>} />
-        <Route path="/issues"      element={<ProtectedRoute><IssuesPage/></ProtectedRoute>} />
-        <Route path="/warehouses"  element={<ProtectedRoute><WarehousesPage/></ProtectedRoute>} />
-        <Route path="/suppliers"   element={<ProtectedRoute><SuppliersPage/></ProtectedRoute>} />
-        <Route path="/clients"     element={<ProtectedRoute><ClientsPage/></ProtectedRoute>} />
-        <Route path="/stock"       element={<ProtectedRoute><StockPage/></ProtectedRoute>} />
-        <Route path="/stock-ledger"       element={<ProtectedRoute><LedgerPage/></ProtectedRoute>} />
+        <Route path="/categories" element={<ProtectedRoute><CategoriesPage/></ProtectedRoute>} />
+        <Route path="/materials" element={<ProtectedRoute><MaterialsPage/></ProtectedRoute>} />
+        <Route path="/receipts" element={<ProtectedRoute><ReceiptsPage/></ProtectedRoute>} />
+        <Route path="/issues" element={<ProtectedRoute><IssuesPage/></ProtectedRoute>} />
+        <Route path="/warehouses" element={<ProtectedRoute><WarehousesPage/></ProtectedRoute>} />
+        <Route path="/suppliers" element={<ProtectedRoute><SuppliersPage/></ProtectedRoute>} />
+        <Route path="/clients" element={<ProtectedRoute><ClientsPage/></ProtectedRoute>} />
+        <Route path="/stock" element={<ProtectedRoute><StockPage/></ProtectedRoute>} />
+        <Route path="/stock-ledger" element={<ProtectedRoute><LedgerPage/></ProtectedRoute>} />
+        <Route path="/dashboard" element={<ProtectedRoute><DashboardPage/></ProtectedRoute>} />
       </Routes>
     </Shell>
   );
