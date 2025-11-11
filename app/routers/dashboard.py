@@ -2,13 +2,11 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from datetime import datetime, timedelta
-from typing import Optional
-from decimal import Decimal
 
 from ..db import get_db
 from ..models import (
     StockCurrent, Material, Warehouse, Receipt, Issue, 
-    ReceiptItem, IssueItem, StockLedger, StockMovementType
+    IssueItem, StockLedger
 )
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
@@ -26,26 +24,22 @@ def get_summary(db: Session = Depends(get_db)):
     total_suppliers = db.query(func.count(Supplier.id)).scalar()
     total_clients = db.query(func.count(Client.id)).scalar()
     
-    # Загальна вартість запасів (по UAH для простоти)
     total_stock_value = db.query(
         func.sum(StockCurrent.quantity * Material.price)
     ).join(Material, StockCurrent.material_id == Material.id)\
      .filter(Material.currency == "UAH")\
      .scalar() or 0
     
-    # Кількість матеріалів з низькими запасами
     low_stock_count = db.query(func.count(StockCurrent.id))\
         .join(Material, StockCurrent.material_id == Material.id)\
         .filter((StockCurrent.quantity - StockCurrent.reserved_quantity) < Material.min_stock)\
         .scalar()
     
-    # Надходження за останній місяць
     last_month = datetime.now() - timedelta(days=30)
     receipts_last_month = db.query(func.count(Receipt.id))\
         .filter(Receipt.created_at >= last_month)\
         .scalar()
     
-    # Видачі за останній місяць
     issues_last_month = db.query(func.count(Issue.id))\
         .filter(Issue.created_at >= last_month)\
         .scalar()
@@ -134,7 +128,6 @@ def get_receipts_issues_timeline(
     """Графік надходжень та видач за період (по днях)"""
     since = datetime.now() - timedelta(days=days)
     
-    # Надходження по днях
     receipts = db.query(
         func.date(Receipt.created_at).label("date"),
         func.count(Receipt.id).label("count"),
@@ -143,7 +136,6 @@ def get_receipts_issues_timeline(
      .group_by(func.date(Receipt.created_at))\
      .all()
     
-    # Видачі по днях
     issues = db.query(
         func.date(Issue.created_at).label("date"),
         func.count(Issue.id).label("count"),
@@ -152,11 +144,9 @@ def get_receipts_issues_timeline(
      .group_by(func.date(Issue.created_at))\
      .all()
     
-    # Формуємо timeline
     receipts_dict = {str(r.date): {"count": r.count, "total": float(r.total or 0)} for r in receipts}
     issues_dict = {str(i.date): {"count": i.count, "total": float(i.total or 0)} for i in issues}
     
-    # Генеруємо всі дати в діапазоні
     timeline = []
     current = datetime.now().date()
     start = (datetime.now() - timedelta(days=days)).date()
@@ -273,7 +263,6 @@ def get_category_distribution(db: Session = Depends(get_db)):
      .group_by(Category.id, Category.name)\
      .all()
     
-    # Матеріали без категорії
     no_category = db.query(
         func.count(Material.id).label("material_count"),
         func.sum(StockCurrent.quantity).label("total_quantity")

@@ -59,38 +59,92 @@ function SimpleBarChart({ data, dataKey, label }) {
 }
 
 function TimelineChart({ data }) {
+  const [tooltip, setTooltip] = useState(null); 
+
   if (!data || data.length === 0) return <p className="text-slate-500">No data</p>;
   
   const maxReceipts = Math.max(...data.map(d => d.receipts_count || 0));
   const maxIssues = Math.max(...data.map(d => d.issues_count || 0));
-  const maxValue = Math.max(maxReceipts, maxIssues);
+  const maxValue = Math.max(1, maxReceipts, maxIssues);
   
+  const handleMouseMove = (e) => {
+    if (tooltip) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setTooltip(t => ({ 
+        ...t, 
+        x: e.clientX - rect.left, 
+        y: e.clientY - rect.top 
+      }));
+    }
+  };
+
+  const handleDayEnter = (item) => {
+    setTooltip({
+      x: 0, y: 0,
+      date: item.date,
+      receipts: item.receipts_count,
+      issues: item.issues_count
+    });
+  };
+
   return (
-    <div className="space-y-1">
-      {data.slice(-14).map((item, idx) => {
-        const receiptsHeight = maxValue > 0 ? (item.receipts_count / maxValue * 100) : 0;
-        const issuesHeight = maxValue > 0 ? (item.issues_count / maxValue * 100) : 0;
+    <div 
+      className="relative flex items-end gap-6 min-w-max h-32 px-2"
+      onMouseLeave={() => setTooltip(null)} 
+      onMouseMove={handleMouseMove} 
+    >
+      {data.slice(-30).map((item, idx) => {
+        const receiptsHeight = (item.receipts_count / maxValue * 100);
+        const issuesHeight = (item.issues_count / maxValue * 100);
         
         return (
-          <div key={idx} className="flex items-end gap-1 h-24">
-            <div className="flex-1 flex flex-col justify-end items-center gap-1">
+          <div 
+            key={idx} 
+            className="flex flex-col items-center gap-1 w-10"
+            onMouseEnter={() => handleDayEnter(item)} 
+          >
+            <div className="flex items-end h-24 w-full gap-0.5">
               <div 
-                className="w-full bg-green-500 rounded-t transition-all"
+                className="w-1/2 bg-green-500 rounded-t transition-all"
                 style={{ height: `${receiptsHeight}%` }}
-                title={`Receipts: ${item.receipts_count}`}
               />
               <div 
-                className="w-full bg-rose-500 rounded-t transition-all"
+                className="w-1/2 bg-rose-500 rounded-t transition-all"
                 style={{ height: `${issuesHeight}%` }}
-                title={`Issues: ${item.issues_count}`}
               />
-              <span className="text-xs text-slate-500 -rotate-45 origin-top-left mt-2">
-                {new Date(item.date).toLocaleDateString('uk', { month: 'short', day: 'numeric' })}
-              </span>
             </div>
+            <span className="text-xs text-slate-500 whitespace-nowrap">
+              {new Date(item.date).toLocaleDateString('uk', { month: 'short', day: 'numeric' })}
+            </span>
           </div>
         );
       })}
+
+      {/*Tooltip*/}
+      {tooltip && (
+        <div 
+          className="absolute bg-slate-900 text-white p-2 rounded-lg shadow-lg text-sm z-10"
+          style={{ 
+            transform: `translate(${tooltip.x + 10}px, ${tooltip.y - 80}px)`, 
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <p className="font-bold mb-1">
+            {new Date(tooltip.date).toLocaleDateString('uk', { 
+              day: 'numeric', month: 'long', year: 'numeric' 
+            })}
+          </p>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-green-500 rounded-sm"></div>
+            <span>Receipts: {tooltip.receipts}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-rose-500 rounded-sm"></div>
+            <span>Issues: {tooltip.issues}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -114,7 +168,7 @@ export default function DashboardPage() {
           api.get("/api/dashboard/summary"),
           api.get("/api/dashboard/top-materials?limit=5"),
           api.get("/api/dashboard/warehouse-stats"),
-          api.get("/api/dashboard/receipts-issues-timeline?days=14"),
+          api.get("/api/dashboard/receipts-issues-timeline?days=30"),
           api.get("/api/dashboard/low-stock-alert?limit=10"),
           api.get("/api/dashboard/recent-activities?limit=8"),
         ]);

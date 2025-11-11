@@ -12,7 +12,8 @@ from .routers import (
     stock,
     receipts,
     users,
-    stock_ledger
+    stock_ledger,
+    dashboard
 )
 
 app = FastAPI(
@@ -39,6 +40,7 @@ app.include_router(stock.router)
 app.include_router(stock_ledger.router)
 app.include_router(receipts.router)
 app.include_router(users.router)
+app.include_router(dashboard.router)
 
 @app.get("/api/health")
 def health_check():
