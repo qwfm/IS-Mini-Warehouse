@@ -60,7 +60,18 @@ export default function ReceiptsPage(){
   
   const setItem = (i, patch) => setForm(f => {
     const next = f.items.slice();
-    next[i] = {...next[i], ...patch};
+    const updated = {...next[i], ...patch};
+    
+    // Якщо змінився матеріал — автопідтягуємо ціну
+    if (patch.material_id !== undefined && patch.material_id) {
+      const mat = materials.find(m => m.id === Number(patch.material_id));
+      if (mat && mat.price) {
+        updated.unit_price = String(mat.price);
+        updated.currency = mat.currency || form.currency;
+      }
+    }
+    
+    next[i] = updated;
     return {...f, items: next};
   });
 

@@ -16,7 +16,6 @@ router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 def get_summary(db: Session = Depends(get_db)):
     """Загальна статистика системи"""
     
-    # Кількість складів, матеріалів, постачальників, клієнтів
     from ..models import Supplier, Client
     
     total_warehouses = db.query(func.count(Warehouse.id)).scalar()

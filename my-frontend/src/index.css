@@ -5,7 +5,6 @@
     @apply h-full bg-slate-50 text-slate-900; 
   }
 
-  /* Базові стилі для форм */
   input:not([type="checkbox"]):not([type="radio"]), 
   select, 
   textarea {
@@ -27,7 +26,6 @@
 }
 
 @layer components {
-  /* Кнопки */
   .btn {
     @apply text-slate-700 bg-white border border-slate-300 
            hover:bg-slate-50 hover:border-slate-400
@@ -53,7 +51,6 @@
     @apply px-2 py-1 text-xs;
   }
 
-  /* Карточки і панелі */
   .card {
     @apply bg-white rounded-xl shadow-sm border border-slate-200 p-6;
   }
@@ -62,7 +59,6 @@
     @apply bg-slate-50 rounded-xl border border-slate-200 p-4;
   }
 
-  /* Таблиці */
   .table-container {
     @apply overflow-x-auto rounded-lg border border-slate-200;
   }

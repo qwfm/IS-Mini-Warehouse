@@ -105,6 +105,15 @@ export default function IssuesPage(){
       }
     }
     
+    // Якщо змінився матеріал — автопідтягуємо ціну
+    if (patch.material_id !== undefined && patch.material_id) {
+      const mat = materials.find(m => m.id === Number(patch.material_id));
+      if (mat && mat.price) {
+        updated.unit_price = String(mat.price);
+        updated.currency = mat.currency || form.currency;
+      }
+    }
+    
     // Якщо змінився склад
     if (patch.warehouse_id !== undefined && updated.material_id) {
       // Перевіряємо, чи є матеріал на новому складі
