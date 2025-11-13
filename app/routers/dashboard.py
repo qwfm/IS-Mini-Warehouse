@@ -17,17 +17,48 @@ def get_summary(db: Session = Depends(get_db)):
     """Загальна статистика системи"""
     
     from ..models import Supplier, Client
+    from decimal import Decimal
+    
+    exchange_rates = {
+        "UAH": Decimal("1.0"),
+        "USD": Decimal("41.5"),
+        "EUR": Decimal("44.8"),
+        "PLN": Decimal("10.2"),
+        "GBP": Decimal("52.3"),
+        "CHF": Decimal("47.5"),
+        "CZK": Decimal("1.73"),
+        "HUF": Decimal("0.11"),
+        "RON": Decimal("9.0"),
+        "TRY": Decimal("1.2"),
+        "SEK": Decimal("3.8"),
+        "NOK": Decimal("3.7"),
+        "JPY": Decimal("0.27"),
+        "CNY": Decimal("5.7"),
+        "AUD": Decimal("26.5"),
+        "CAD": Decimal("29.8"),
+    }
     
     total_warehouses = db.query(func.count(Warehouse.id)).scalar()
     total_materials = db.query(func.count(Material.id)).filter(Material.is_active == True).scalar()
     total_suppliers = db.query(func.count(Supplier.id)).scalar()
     total_clients = db.query(func.count(Client.id)).scalar()
     
-    total_stock_value = db.query(
-        func.sum(StockCurrent.quantity * Material.price)
+    stock_items = db.query(
+        StockCurrent.quantity,
+        Material.price,
+        Material.currency
     ).join(Material, StockCurrent.material_id == Material.id)\
-     .filter(Material.currency == "UAH")\
-     .scalar() or 0
+     .filter(Material.price.isnot(None))\
+     .all()
+    
+    total_stock_value = Decimal("0")
+    for item in stock_items:
+        quantity = Decimal(str(item.quantity))
+        price = Decimal(str(item.price))
+        currency = item.currency or "UAH"
+        rate = exchange_rates.get(currency, Decimal("1.0"))
+        
+        total_stock_value += quantity * price * rate
     
     low_stock_count = db.query(func.count(StockCurrent.id))\
         .join(Material, StockCurrent.material_id == Material.id)\
