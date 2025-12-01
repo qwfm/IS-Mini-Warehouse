@@ -1,344 +1,192 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useApi } from "../api/client";
 import useAuthz from "../hooks/useAuthz";
-import CurrencySelect from "../components/CurrencySelect";
-import ReceiptDetailsModal from "./ReceiptDetailsModal";
-import EditReceiptModal from "./EditReceiptModal";
+import EditReceiptModal from "./EditReceiptModal"; // Переконайтесь, що шлях правильний
+import ReceiptDetailsModal from "./ReceiptDetailsModal"; // Переконайтесь, що шлях правильний
 
-const emptyItem = { material_id:"", warehouse_id:"", qty:"1", unit_price:"0", currency:"UAH", weight:"", notes:"" };
-
-export default function ReceiptsPage(){
+export default function ReceiptsPage() {
   const api = useApi();
-  const { hasRole, hasPerm } = useAuthz();
+  const { hasRole } = useAuthz();
 
+  // Дані
   const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [canCreate, setCanCreate] = useState(false);
-
   const [materials, setMaterials] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
+  const [stock, setStock] = useState([]); // Додано: для фільтрації в модалці
+  
+  // Стан UI
+  const [loading, setLoading] = useState(true);
+  const [canCreate, setCanCreate] = useState(false);
+  const [canDelete, setCanDelete] = useState(false);
 
+  // Модальні вікна
+  const [editOpen, setEditOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  
   const [viewOpen, setViewOpen] = useState(false);
   const [viewId, setViewId] = useState(null);
 
-  const [editOpen, setEditOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
-
-  const [form, setForm] = useState({
-    document_number: "",
-    supplier_id: "",
-    currency: "UAH",
-    notes: "",
-    items: [ { ...emptyItem } ],
-  });
-
-  const loadLists = async () => {
+  // Завантаження всіх даних
+  const loadData = async () => {
     setLoading(true);
     try {
-      const [docs, mats, whs, sups] = await Promise.all([
+      const [rData, mData, wData, sData, stData] = await Promise.all([
         api.get("/api/receipts"),
-        api.get("/api/materials"),
+        api.get("/api/materials?is_active=true"),
         api.get("/api/warehouses"),
         api.get("/api/suppliers"),
+        api.get("/api/stock/current") // Завантажуємо залишки
       ]);
-      setRows(docs);
-      setMaterials(mats);
-      setWarehouses(whs);
-      setSuppliers(sups);
-    } finally { setLoading(false); }
+      
+      setRows(rData);
+      setMaterials(mData);
+      setWarehouses(wData);
+      setSuppliers(sData);
+      setStock(stData); // Зберігаємо залишки
+    } catch (e) {
+      console.error("Failed to load receipts data", e);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(()=>{ (async()=>{
-    await loadLists();
-    setCanCreate((await hasRole("storekeeper")) || (await hasRole("admin")) || (await hasPerm("create:receipts")));
-  })(); }, []);
+  useEffect(() => {
+    (async () => {
+      await loadData();
+      const isAdmin = await hasRole("admin");
+      const isStorekeeper = await hasRole("storekeeper");
+      
+      setCanCreate(isAdmin || isStorekeeper);
+      setCanDelete(isAdmin);
+    })();
+  }, []);
 
-  const addItem = () => setForm(f => ({...f, items: [...f.items, {...emptyItem, currency:f.currency}]}));
-  
-  const removeItem = (i) => setForm(f => ({...f, items: f.items.filter((_, idx)=> idx !== i)}));
-  
-  const setItem = (i, patch) => setForm(f => {
-    const next = f.items.slice();
-    const updated = {...next[i], ...patch};
-    
-    // Якщо змінився матеріал — автопідтягуємо ціну
-    if (patch.material_id !== undefined && patch.material_id) {
-      const mat = materials.find(m => m.id === Number(patch.material_id));
-      if (mat && mat.price) {
-        updated.unit_price = String(mat.price);
-        updated.currency = mat.currency || form.currency;
-      }
-    }
-    
-    next[i] = updated;
-    return {...f, items: next};
-  });
-
-  const totals = useMemo(()=>{
-    let sum = 0;
-    for (const it of form.items) {
-      sum += (Number(it.qty) || 0) * (Number(it.unit_price) || 0);
-    }
-    return { total: sum };
-  }, [form.items]);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!form.supplier_id) return alert("Select supplier");
-    if (!form.items.length) return alert("Add at least one item");
-
-    const payload = {
-      document_number: form.document_number || undefined,
-      supplier_id: Number(form.supplier_id),
-      currency: form.currency || "UAH",
-      notes: form.notes || null,
-      items: form.items.map(it => ({
-        material_id: Number(it.material_id),
-        warehouse_id: it.warehouse_id ? Number(it.warehouse_id) : null,
-        qty: Number(it.qty),
-        unit_price: Number(it.unit_price),
-        currency: it.currency || form.currency || "UAH",
-        weight: it.weight ? Number(it.weight) : null,
-        notes: it.notes || null,
-        total_price: Number(it.qty) * Number(it.unit_price),
-      }))
-    };
-
-    await api.post("/api/receipts", payload);
-    setForm({ document_number:"", supplier_id:"", currency:"UAH", notes:"", items:[{...emptyItem}] });
-    await loadLists();
+  const handleCreate = () => {
+    setEditing(null); 
+    setEditOpen(true);
   };
 
-  const remove = async (r) => {
-    if (!confirm(`Delete receipt ${r.document_number || r.id}?`)) return;
-    await api.del(`/api/receipts/${r.id}`);
-    await loadLists();
+  const handleEdit = (row) => {
+    setEditing(row);
+    setEditOpen(true);
+  };
+
+  const remove = async (row) => {
+    if (!confirm(`Delete receipt ${row.document_number}? This will revert stock changes.`)) return;
+    await api.del(`/api/receipts/${row.id}`);
+    await loadData();
   };
 
   return (
     <div className="space-y-6">
-      <div className="page-header">
-        <h1 className="page-title">Receipts</h1>
-        <p className="text-slate-600 mt-1">Manage incoming goods receipts</p>
+      <div className="page-header flex justify-between items-center">
+        <div>
+          <h1 className="page-title">Receipts</h1>
+          <p className="text-slate-600">Incoming goods management</p>
+        </div>
+        {canCreate && (
+          <button onClick={handleCreate} className="btn btn-primary">
+            + New Receipt
+          </button>
+        )}
       </div>
 
-      {canCreate && (
-        <div className="card">
-          <h3 className="text-lg font-semibold mb-4">Create New Receipt</h3>
-          <form onSubmit={submit} className="space-y-6">
-            <div className="form-grid-3">
-              <div className="field">
-                <label className="label">Document Number</label>
-                <input 
-                  placeholder="Optional" 
-                  value={form.document_number}
-                  onChange={e=>setForm({...form, document_number:e.target.value})}
-                />
-              </div>
-              <div className="field">
-                <label className="label">Supplier *</label>
-                <select 
-                  value={form.supplier_id} 
-                  onChange={e=>setForm({...form, supplier_id:e.target.value})}
-                  required
-                >
-                  <option value="">Select supplier</option>
-                  {suppliers.map(s=> <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-              <div className="field">
-                <label className="label">Currency</label>
-                <CurrencySelect 
-                  value={form.currency} 
-                  onChange={(val)=>setForm({...form, currency: val || "UAH"})}
-                />
-              </div>
-            </div>
-
-            <div className="field">
-              <label className="label">Notes</label>
-              <textarea 
-                placeholder="Optional notes" 
-                value={form.notes} 
-                onChange={e=>setForm({...form, notes:e.target.value})}
-                rows={2}
-              />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <label className="label mb-0">Items *</label>
-                <button type="button" onClick={addItem} className="btn btn-sm">
-                  + Add Item
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                {form.items.map((it, idx)=>(
-                  <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                      <div className="field lg:col-span-2">
-                        <label className="label text-xs">Material</label>
-                        <select value={it.material_id} onChange={e=>setItem(idx,{material_id:e.target.value})}>
-                          <option value="">Select material</option>
-                          {materials.map(m=> <option key={m.id} value={m.id}>{m.code} — {m.name}</option>)}
-                        </select>
-                      </div>
-                      <div className="field lg:col-span-2">
-                        <label className="label text-xs">Warehouse</label>
-                        <select value={it.warehouse_id} onChange={e=>setItem(idx,{warehouse_id:e.target.value})}>
-                          <option value="">Select warehouse</option>
-                          {warehouses.map(w=> <option key={w.id} value={w.id}>{w.name}</option>)}
-                        </select>
-                      </div>
-                      
-                      <div className="field">
-                        <label className="label text-xs">Quantity</label>
-                        <input 
-                          type="number" 
-                          step="0.0001" 
-                          value={it.qty} 
-                          onChange={e=>setItem(idx,{qty:e.target.value})}
-                        />
-                      </div>
-                      <div className="field">
-                        <label className="label text-xs">Unit Price</label>
-                        <input 
-                          type="number" 
-                          step="0.01" 
-                          value={it.unit_price} 
-                          onChange={e=>setItem(idx,{unit_price:e.target.value})}
-                        />
-                      </div>
-                      <div className="field">
-                        <label className="label text-xs">Currency</label>
-                        <CurrencySelect 
-                          value={it.currency || form.currency} 
-                          onChange={(val)=>setItem(idx,{currency: val || form.currency})}
-                        />
-                      </div>
-                      <div className="field">
-                        <label className="label text-xs">Weight</label>
-                        <input 
-                          type="number" 
-                          step="0.000001" 
-                          placeholder="Optional" 
-                          value={it.weight} 
-                          onChange={e=>setItem(idx,{weight:e.target.value})}
-                        />
-                      </div>
-                      
-                      <div className="field lg:col-span-3">
-                        <label className="label text-xs">Notes</label>
-                        <input 
-                          placeholder="Optional" 
-                          value={it.notes} 
-                          onChange={e=>setItem(idx,{notes:e.target.value})}
-                        />
-                      </div>
-                      <div className="field">
-                        <label className="label text-xs">Line Total</label>
-                        <div className="px-3 py-2 bg-slate-100 rounded-lg text-sm font-medium">
-                          {((Number(it.qty)||0)*(Number(it.unit_price)||0)).toFixed(2)}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-2 flex justify-end">
-                      <button 
-                        type="button" 
-                        onClick={()=>removeItem(idx)} 
-                        className="btn-danger btn-sm"
-                      >
-                        Remove Item
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-4 border-t border-slate-200">
-              <div className="text-lg font-semibold">
-                Total: <span className="text-sky-600">{totals.total.toFixed(2)} {form.currency}</span>
-              </div>
-              <button type="submit" className="btn-primary">
-                Create Receipt
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
       {loading ? (
-        <div className="card text-center py-8">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-sky-600"></div>
-          <p className="mt-4 text-slate-600">Loading receipts...</p>
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="card text-center py-12">
-          <p className="text-slate-600">No receipts yet</p>
-        </div>
+        <div className="text-center py-10 text-slate-500">Loading data...</div>
       ) : (
-        <div className="card">
-          <div className="table-container">
-            <table className="table">
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="table w-full">
               <thead>
                 <tr>
-                  <th>Document #</th>
+                  <th className="w-16">ID</th>
+                  <th>Number</th>
                   <th>Supplier</th>
                   <th>Date</th>
                   <th>Currency</th>
-                  <th className="text-right">Total</th>
-                  <th className="text-right">Actions</th>
+                  <th className="text-right">Total Amount</th>
+                  <th className="text-right w-48">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map(r=>(
-                  <tr key={r.id}>
-                    <td className="font-medium">{r.document_number || r.id}</td>
-                    <td>{r.supplier_name || r.supplier_id || "—"}</td>
-                    <td>{r.date?.slice(0,10)}</td>
-                    <td>{r.currency}</td>
-                    <td className="text-right font-medium">{r.total_amount}</td>
-                    <td>
-                      <div className="flex justify-end gap-2">
-                        <button onClick={()=>{setViewId(r.id); setViewOpen(true);}} className="btn btn-sm">
-                          View
-                        </button>
-                        <button onClick={()=>{setEditing(r); setEditOpen(true);}} className="btn btn-sm">
-                          Edit
-                        </button>
-                        <button onClick={()=>remove(r)} className="btn-danger btn-sm">
-                          Delete
-                        </button>
-                      </div>
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="text-center py-6 text-slate-500">
+                      No receipts found.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  rows.map(r => {
+                    const supplierName = suppliers.find(s => s.id === r.supplier_id)?.name || r.supplier_id;
+                    return (
+                      <tr key={r.id}>
+                        <td className="text-slate-500 text-xs">{r.id}</td>
+                        <td className="font-medium">{r.document_number}</td>
+                        <td>{supplierName}</td>
+                        <td className="text-slate-600">
+                          {new Date(r.date).toLocaleDateString()}
+                        </td>
+                        <td><span className="badge bg-slate-100">{r.currency}</span></td>
+                        <td className="text-right font-mono font-medium">
+                          {Number(r.total_amount).toFixed(2)}
+                        </td>
+                        <td className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <button 
+                              onClick={() => { setViewId(r.id); setViewOpen(true); }} 
+                              className="btn btn-sm"
+                            >
+                              View
+                            </button>
+                            {canCreate && (
+                              <button 
+                                onClick={() => handleEdit(r)} 
+                                className="text-sky-600 hover:bg-sky-50 px-2 py-1 rounded text-sm font-medium transition-colors"
+                              >
+                                Edit
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button 
+                                onClick={() => remove(r)} 
+                                className="text-rose-600 hover:bg-rose-50 px-2 py-1 rounded text-sm font-medium transition-colors"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      <ReceiptDetailsModal
-        open={viewOpen}
-        onClose={()=>setViewOpen(false)}
-        receiptId={viewId}
-        materials={materials}
-        warehouses={warehouses}
-      />
-      
+      {/* Модалка редагування */}
       <EditReceiptModal
         open={editOpen}
-        onClose={()=>setEditOpen(false)}
-        receipt={editing || {}}
+        onClose={() => setEditOpen(false)}
+        receipt={editing}
         materials={materials}
         warehouses={warehouses}
         suppliers={suppliers}
+        stock={stock} // Передаємо залишки
         api={api}
-        onSaved={loadLists}
+        onSaved={loadData}
+      />
+
+      {/* Модалка перегляду */}
+      <ReceiptDetailsModal
+        open={viewOpen}
+        onClose={() => setViewOpen(false)}
+        receiptId={viewId}
+        materials={materials}
+        warehouses={warehouses}
       />
     </div>
   );

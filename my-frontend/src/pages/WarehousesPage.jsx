@@ -8,9 +8,8 @@ export default function WarehousesPage(){
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [canWrite, setCanWrite] = useState(false);
-  const [form, setForm] = useState({
-    id:null, name:"", address:"", capacity:"", capacity_unit:""
-  });
+  const [form, setForm] = useState({ id:null, name:"", address:"", capacity:"", capacity_unit:"" });
+  const [isFormOpen, setIsFormOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -23,8 +22,6 @@ export default function WarehousesPage(){
     setCanWrite((await hasRole("admin")) || (await hasPerm("write:warehouses")));
   })(); }, []);
 
-  const editing = form.id !== null;
-
   const submit = async (e) => {
     e.preventDefault();
     const payload = {
@@ -35,61 +32,107 @@ export default function WarehousesPage(){
     };
     if (!payload.name) return;
 
-    if (editing) await api.put(`/api/warehouses/${form.id}`, payload);
+    if (form.id) await api.put(`/api/warehouses/${form.id}`, payload);
     else         await api.post("/api/warehouses", payload);
-
-    setForm({ id:null, name:"", address:"", capacity:"", capacity_unit:"" });
+    
+    resetForm();
     await load();
   };
 
-  const startEdit = (r) => setForm({
-    id:r.id, name:r.name ?? "", address:r.address ?? "",
-    capacity:r.capacity ?? "", capacity_unit:r.capacity_unit ?? ""
-  });
+  const resetForm = () => {
+    setForm({ id:null, name:"", address:"", capacity:"", capacity_unit:"" });
+    setIsFormOpen(false);
+  }
 
-  const cancel = () => setForm({ id:null, name:"", address:"", capacity:"", capacity_unit:"" });
+  const startEdit = (r) => {
+    setForm({ 
+      id:r.id, 
+      name:r.name, 
+      address:r.address??"", 
+      capacity:r.capacity??"", 
+      capacity_unit:r.capacity_unit??"" 
+    });
+    setIsFormOpen(true);
+  }
 
-  const remove = async (id) => { if (confirm("Delete warehouse?")) { await api.del(`/api/warehouses/${id}`); await load(); }};
+  const remove = async (id) => { 
+    if(confirm("Delete warehouse?")) { await api.del(`/api/warehouses/${id}`); await load(); }
+  };
 
   return (
-    <div style={{padding:16, maxWidth:900}}>
-      <h2>Warehouses</h2>
+    <div className="space-y-6">
+       <div className="page-header flex justify-between items-center">
+        <div>
+           <h2 className="page-title">Warehouses</h2>
+           <p className="text-slate-600">Manage storage locations</p>
+        </div>
+        {canWrite && !isFormOpen && (
+          <button onClick={() => setIsFormOpen(true)} className="btn btn-primary">
+            + New Warehouse
+          </button>
+        )}
+      </div>
 
-      {canWrite && (
-        <form onSubmit={submit} style={{display:"grid", gridTemplateColumns:"2fr 3fr 1fr 1fr auto", gap:8, marginBottom:16}}>
-          <input placeholder="name" value={form.name} onChange={e=>setForm({...form, name:e.target.value})}/>
-          <input placeholder="address" value={form.address} onChange={e=>setForm({...form, address:e.target.value})}/>
-          <input type="number" step="0.01" placeholder="capacity" value={form.capacity} onChange={e=>setForm({...form, capacity:e.target.value})}/>
-          <input placeholder="unit" value={form.capacity_unit} onChange={e=>setForm({...form, capacity_unit:e.target.value})}/>
-          <div>
-            <button type="submit">{editing ? "Save" : "Create"}</button>{" "}
-            {editing && <button type="button" onClick={cancel}>Cancel</button>}
-          </div>
-        </form>
+      {canWrite && isFormOpen && (
+        <div className="card bg-slate-50 border-slate-200">
+           <h3 className="font-semibold mb-4">{form.id ? "Edit Warehouse" : "Create Warehouse"}</h3>
+           <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+             <div className="md:col-span-1">
+               <label className="label">Name</label>
+               <input className="input" placeholder="Main Warehouse" value={form.name} onChange={e=>setForm({...form, name:e.target.value})}/>
+             </div>
+             <div className="md:col-span-1">
+               <label className="label">Address</label>
+               <input className="input" placeholder="Location address" value={form.address} onChange={e=>setForm({...form, address:e.target.value})}/>
+             </div>
+             <div className="md:col-span-1">
+               <label className="label">Capacity</label>
+               <input type="number" step="0.01" className="input" value={form.capacity} onChange={e=>setForm({...form, capacity:e.target.value})}/>
+             </div>
+             <div className="md:col-span-1">
+               <label className="label">Unit</label>
+               <input className="input" placeholder="m3, sq.m" value={form.capacity_unit} onChange={e=>setForm({...form, capacity_unit:e.target.value})}/>
+             </div>
+             <div className="md:col-span-2 flex justify-end gap-2 mt-2">
+                <button type="button" onClick={resetForm} className="btn">Cancel</button>
+                <button type="submit" className="btn btn-primary">{form.id ? "Save" : "Create"}</button>
+             </div>
+           </form>
+        </div>
       )}
 
       {loading ? <p>Loading…</p> : (
-        <table width="100%" cellPadding="6" style={{borderCollapse:"collapse"}}>
-          <thead><tr>
-            <th align="left">Name</th><th align="left">Address</th><th>Capacity</th><th>Unit</th><th/>
-          </tr></thead>
-          <tbody>
-            {rows.map(r=>(
-              <tr key={r.id} style={{borderTop:"1px solid #ddd"}}>
-                <td>{r.name}</td>
-                <td>{r.address}</td>
-                <td align="right">{r.capacity ?? "-"}</td>
-                <td align="center">{r.capacity_unit ?? "-"}</td>
-                <td align="right" style={{whiteSpace:"nowrap"}}>
-                  {canWrite && <>
-                    <button onClick={()=>startEdit(r)}>Edit</button>{" "}
-                    <button onClick={()=>remove(r.id)}>Delete</button>
-                  </>}
-                </td>
+        <div className="card">
+          <table className="table w-full">
+            <thead>
+              <tr>
+                <th className="w-16">ID</th>
+                <th>Name</th>
+                <th>Address</th>
+                <th className="text-right">Capacity</th>
+                <th className="text-right">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map(r=>(
+                <tr key={r.id}>
+                  <td className="text-slate-500 text-sm">{r.id}</td>
+                  <td className="font-medium">{r.name}</td>
+                  <td className="text-slate-600">{r.address || "—"}</td>
+                  <td className="text-right">
+                     {r.capacity ? `${r.capacity} ${r.capacity_unit||""}` : "—"}
+                  </td>
+                  <td className="text-right flex justify-end gap-2">
+                    {canWrite && <>
+                      <button onClick={()=>startEdit(r)} className="btn btn-sm">Edit</button>
+                      <button onClick={()=>remove(r.id)} className="btn-danger btn-sm">Delete</button>
+                    </>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

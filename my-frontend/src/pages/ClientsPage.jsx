@@ -8,6 +8,7 @@ export default function ClientsPage(){
   const [rows, setRows] = useState([]);
   const [canWrite, setCanWrite] = useState(false);
   const [form, setForm] = useState({ id:null, name:"", contact_info:"" });
+  const [isFormOpen, setIsFormOpen] = useState(false);
 
   const load = async () => setRows(await api.get("/api/clients"));
 
@@ -16,49 +17,93 @@ export default function ClientsPage(){
     setCanWrite((await hasRole("admin")) || (await hasPerm("write:clients")));
   })(); }, []);
 
-  const editing = form.id !== null;
-
   const submit = async (e) => {
     e.preventDefault();
     const payload = { name: form.name.trim(), contact_info: form.contact_info || null };
     if (!payload.name) return;
 
-    if (editing) await api.put(`/api/clients/${form.id}`, payload);
+    if (form.id) await api.put(`/api/clients/${form.id}`, payload);
     else         await api.post("/api/clients", payload);
 
-    setForm({ id:null, name:"", contact_info:"" });
+    resetForm();
     await load();
   };
 
-  const startEdit = (r) => setForm({ id:r.id, name:r.name ?? "", contact_info:r.contact_info ?? "" });
-  const cancel = () => setForm({ id:null, name:"", contact_info:"" });
-  const remove = async (id) => { if (confirm("Delete client?")) { await api.del(`/api/clients/${id}`); await load(); }};
+  const resetForm = () => {
+    setForm({ id:null, name:"", contact_info:"" });
+    setIsFormOpen(false);
+  }
+
+  const startEdit = (r) => {
+    setForm({ id:r.id, name:r.name ?? "", contact_info:r.contact_info ?? "" });
+    setIsFormOpen(true);
+  }
+
+  const remove = async (id) => { 
+    if (confirm("Delete client?")) { await api.del(`/api/clients/${id}`); await load(); }
+  };
 
   return (
-    <div style={{padding:16, maxWidth:800}}>
-      <h2>Clients</h2>
-      {canWrite && (
-        <form onSubmit={submit} style={{display:"grid", gridTemplateColumns:"1fr 2fr auto", gap:8, marginBottom:16}}>
-          <input placeholder="name" value={form.name} onChange={e=>setForm({...form, name:e.target.value})}/>
-          <input placeholder="contact info" value={form.contact_info} onChange={e=>setForm({...form, contact_info:e.target.value})}/>
-          <div>
-            <button type="submit">{editing ? "Save" : "Create"}</button>{" "}
-            {editing && <button type="button" onClick={cancel}>Cancel</button>}
-          </div>
-        </form>
+    <div className="space-y-6">
+      <div className="page-header flex justify-between items-center">
+        <div>
+           <h2 className="page-title">Clients</h2>
+           <p className="text-slate-600">Manage your customers</p>
+        </div>
+        {canWrite && !isFormOpen && (
+          <button onClick={() => setIsFormOpen(true)} className="btn btn-primary">
+            + New Client
+          </button>
+        )}
+      </div>
+
+      {canWrite && isFormOpen && (
+        <div className="card bg-slate-50 border-slate-200">
+          <h3 className="font-semibold mb-4">{form.id ? "Edit Client" : "Add Client"}</h3>
+          <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="label">Name</label>
+              <input className="input" placeholder="Client Name" value={form.name} onChange={e=>setForm({...form, name:e.target.value})}/>
+            </div>
+            <div>
+              <label className="label">Contact Info</label>
+              <input className="input" placeholder="Email / Phone" value={form.contact_info} onChange={e=>setForm({...form, contact_info:e.target.value})}/>
+            </div>
+            <div className="md:col-span-2 flex justify-end gap-2 mt-2">
+               <button type="button" onClick={resetForm} className="btn">Cancel</button>
+               <button type="submit" className="btn btn-primary">{form.id ? "Save" : "Create"}</button>
+            </div>
+          </form>
+        </div>
       )}
 
-      <ul>
-        {rows.map(r=>(
-          <li key={r.id}>
-            <b>{r.name}</b>{r.contact_info ? ` — ${r.contact_info}` : ""}
-            {canWrite && <>
-              <button style={{marginLeft:8}} onClick={()=>startEdit(r)}>Edit</button>{" "}
-              <button onClick={()=>remove(r.id)}>Delete</button>
-            </>}
-          </li>
-        ))}
-      </ul>
+      <div className="card">
+        <table className="table w-full">
+          <thead>
+            <tr>
+              <th className="w-16">ID</th>
+              <th>Name</th>
+              <th>Contact Info</th>
+              <th className="text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r=>(
+              <tr key={r.id}>
+                <td className="text-slate-500 text-sm">{r.id}</td>
+                <td className="font-medium">{r.name}</td>
+                <td className="text-slate-600">{r.contact_info || "—"}</td>
+                <td className="text-right flex justify-end gap-2">
+                  {canWrite && <>
+                    <button onClick={()=>startEdit(r)} className="btn btn-sm">Edit</button>
+                    <button onClick={()=>remove(r.id)} className="btn-danger btn-sm">Delete</button>
+                  </>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

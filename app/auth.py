@@ -1,12 +1,12 @@
 import json
 import requests
-import os
 from jose import jwt
 from jose.exceptions import JWTError, ExpiredSignatureError
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from functools import lru_cache
 from .config import settings
+from typing import Union, List
 
 if getattr(settings, "AUTH_DISABLED", False):
     def get_current_user_dummy(*args, **kwargs):
@@ -20,10 +20,25 @@ if getattr(settings, "AUTH_DISABLED", False):
     def get_current_user(credentials=None):
         return get_current_user_dummy()
 
-    def require_role(role: str):
-        def _role_checker(payload = None):
-            return get_current_user_dummy()
-        return _role_checker
+    def require_role(role: Union[str, List[str]]):
+        def role_checker(payload = Depends(get_current_user)):
+            user_roles = payload.get(settings.AUTH0_NAMESPACE + 'roles') or payload.get('roles') or []
+            
+            if 'admin' in user_roles:
+                return payload
+
+            required_roles = [role] if isinstance(role, str) else role
+            
+            has_permission = any(r in user_roles for r in required_roles)
+            
+            if not has_permission:
+                raise HTTPException(
+                    status_code=403, 
+                    detail=f"Access denied. Required: {required_roles}"
+                )
+            return payload
+            
+        return role_checker
     
 auth_scheme = HTTPBearer()
 

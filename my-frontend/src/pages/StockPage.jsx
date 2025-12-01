@@ -59,22 +59,15 @@ export default function StockPage(){
         </div>
       </div>
 
-      {loading ? (
-        <div className="card text-center py-8">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-sky-600"></div>
-          <p className="mt-4 text-slate-600">Loading stock...</p>
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="card text-center py-12">
-          <p className="text-slate-600">No stock records found</p>
-        </div>
-      ) : (
+      {loading ? <p className="text-center py-4">Loading stock data...</p> : (
         <div className="card">
-          <div className="table-container">
-            <table className="table">
+          <div className="overflow-x-auto">
+            <table className="table w-full">
               <thead>
                 <tr>
+                  <th className="w-16">WH ID</th>
                   <th>Warehouse</th>
+                  <th className="w-16">Mat ID</th>
                   <th>Material</th>
                   <th className="text-right">Quantity</th>
                   <th className="text-right">Reserved</th>
@@ -82,23 +75,27 @@ export default function StockPage(){
                 </tr>
               </thead>
               <tbody>
-                {rows.map(r=>{
+                {rows.length === 0 ? (
+                  <tr><td colSpan="7" className="text-center py-4 text-slate-500">No stock found</td></tr>
+                ) : rows.map(r=>{
                   const available = Number(r.quantity) - Number(r.reserved_quantity);
                   return (
                     <tr key={r.id}>
-                      <td>
-                        <div className="font-medium">{r.warehouse_name || "—"}</div>
-                      </td>
+                      <td className="text-slate-500 text-xs font-mono">{r.warehouse_id}</td>
+                      <td><div className="font-medium">{r.warehouse_name || "—"}</div></td>
+                      
+                      <td className="text-slate-500 text-xs font-mono">{r.material_id}</td>
                       <td>
                         <div className="font-medium">
-                          {r.material_code && <span className="text-slate-500">{r.material_code} — </span>}
+                          {r.material_code && <span className="text-slate-500 mr-1">{r.material_code}</span>}
                           {r.material_name || "—"}
                         </div>
                       </td>
+                      
                       <td className="text-right font-medium">{Number(r.quantity).toFixed(4)}</td>
                       <td className="text-right text-amber-600">{Number(r.reserved_quantity).toFixed(4)}</td>
                       <td className="text-right">
-                        <span className={`font-medium ${available > 0 ? 'text-green-600' : 'text-slate-400'}`}>
+                        <span className={`font-bold ${available > 0 ? 'text-green-600' : 'text-slate-400'}`}>
                           {available.toFixed(4)}
                         </span>
                       </td>
