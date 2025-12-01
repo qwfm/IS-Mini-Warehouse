@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useApi } from "../api/client";
 import DateRangePicker from "../components/DateRangePicker";
 import CounterpartyReports from "../components/CounterpartyReports";
-
+import { TopCategoriesSales, WarehouseDistribution, SupplierStatistics, TopCustomers } from "../components/StatisticalAnalytics";
 function StatCard({ title, value, subtitle, icon, color = "sky" }) {
   const colorClasses = {
     sky: "bg-sky-50 text-sky-700 border-sky-200",
@@ -334,6 +334,16 @@ export default function DashboardPage() {
       </div>
 
       <CounterpartyReports />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TopCategoriesSales />
+        <WarehouseDistribution />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <SupplierStatistics />
+        <TopCustomers />
+      </div>
+      
     </div>
   );
 }
