@@ -1,13 +1,47 @@
-// src/components/StatisticalAnalytics.jsx
 import { useEffect, useState, useRef } from "react";
 import { useApi } from "../api/client";
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
+  PieChart, Pie, Cell 
+} from 'recharts';
 
-// 1. Найпопулярніші категорії за продажами
+const COLORS = ['#0ea5e9', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444', '#06b6d4', '#6366f1'];
+
+const ViewToggle = ({ mode, setMode, options }) => (
+  <div className="flex bg-slate-100 rounded-lg p-1 border border-slate-200">
+    {options.map((opt) => (
+      <button
+        key={opt.value}
+        onClick={() => setMode(opt.value)}
+        className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+          mode === opt.value 
+            ? 'bg-white text-slate-900 shadow-sm' 
+            : 'text-slate-500 hover:text-slate-700'
+        }`}
+      >
+        {opt.label}
+      </button>
+    ))}
+  </div>
+);
+
+const PeriodSelect = ({ value, onChange }) => (
+  <select 
+    value={value} 
+    onChange={e => onChange(Number(e.target.value))}
+    className="input input-sm w-auto text-xs ml-2"
+  >
+    <option value="30">30 days</option>
+    <option value="60">60 days</option>
+    <option value="90">90 days</option>
+  </select>
+);
 export function TopCategoriesSales() {
   const api = useApi();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState(30);
+  const [viewMode, setViewMode] = useState('bar');
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -26,11 +60,9 @@ export function TopCategoriesSales() {
 
         if (!mounted.current) return;
 
-        // Фільтруємо за період
         const cutoffDate = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
         const recentIssues = ledger.filter(e => new Date(e.date_time) >= cutoffDate);
 
-        // Групуємо по категоріях
         const categoryStats = {};
         recentIssues.forEach(issue => {
           const material = materials.find(m => m.id === issue.material_id);
@@ -55,12 +87,12 @@ export function TopCategoriesSales() {
           }
         });
 
-        // Форматуємо результат
         const result = Object.values(categoryStats)
           .map(stat => {
             const category = categories.find(c => c.id === stat.categoryId);
             return {
               categoryId: stat.categoryId,
+              name: category?.name || `Category #${stat.categoryId}`,
               categoryName: category?.name || `Category #${stat.categoryId}`,
               totalQty: stat.totalQty,
               totalValue: stat.totalValue,
@@ -68,7 +100,8 @@ export function TopCategoriesSales() {
               uniqueItems: stat.uniqueItems.size
             };
           })
-          .sort((a, b) => b.totalValue - a.totalValue);
+          .sort((a, b) => b.totalValue - a.totalValue)
+          .slice(0, 10);
 
         setData(result);
       } catch (err) {
@@ -85,74 +118,113 @@ export function TopCategoriesSales() {
   if (loading) return <div className="text-center py-4 text-slate-500">Loading category statistics...</div>;
 
   return (
-    <div className="card">
-      <div className="flex items-center justify-between mb-4">
+    <div className="card h-full flex flex-col">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
         <div>
-          <h3 className="text-lg font-semibold">📦 Top Categories by Sales</h3>
-          <p className="text-sm text-slate-600">Most sold product categories</p>
+          <h3 className="text-lg font-semibold">📦 Top Categories</h3>
+          <p className="text-sm text-slate-600">By sales volume</p>
         </div>
-        <select 
-          value={period} 
-          onChange={e => setPeriod(Number(e.target.value))}
-          className="input input-sm"
-        >
-          <option value="7">Last 7 days</option>
-          <option value="30">Last 30 days</option>
-          <option value="90">Last 90 days</option>
-        </select>
+        <div className="flex items-center gap-2">
+          <ViewToggle 
+            mode={viewMode} 
+            setMode={setViewMode} 
+            options={[
+              { value: 'bar', label: 'Bar' },
+              { value: 'pie', label: 'Pie' },
+              { value: 'list', label: 'List' }
+            ]} 
+          />
+          <PeriodSelect value={period} onChange={setPeriod} />
+        </div>
       </div>
 
       {data.length === 0 ? (
         <p className="text-slate-500 text-center py-8">No sales data available</p>
       ) : (
-        <>
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            <div className="p-3 bg-sky-50 border border-sky-200 rounded-lg text-center">
-              <div className="text-xs text-sky-600">Total Categories</div>
-              <div className="text-2xl font-bold text-sky-900">{data.length}</div>
-            </div>
-            <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-center">
-              <div className="text-xs text-green-600">Total Transactions</div>
-              <div className="text-2xl font-bold text-green-900">
-                {data.reduce((sum, d) => sum + d.transactionCount, 0)}
-              </div>
-            </div>
-            <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-center">
-              <div className="text-xs text-purple-600">Total Value</div>
-              <div className="text-2xl font-bold text-purple-900">
-                {data.reduce((sum, d) => sum + d.totalValue, 0).toFixed(0)}
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {data.map((cat, idx) => {
-              const percentage = (cat.totalValue / maxValue) * 100;
-              return (
-                <div key={idx} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="font-medium text-slate-900">{cat.categoryName}</div>
-                      <div className="text-xs text-slate-500">
-                        {cat.transactionCount} transactions • {cat.uniqueItems} unique items
-                      </div>
-                    </div>
-                    <div className="text-right ml-4">
-                      <div className="font-bold text-slate-900">{cat.totalValue.toFixed(2)}</div>
-                      <div className="text-xs text-slate-500">{cat.totalQty.toFixed(0)} pcs</div>
-                    </div>
-                  </div>
-                  <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-linear-to-r from-sky-500 to-purple-500 rounded-full transition-all"
-                      style={{ width: `${percentage}%` }}
-                    />
+        <div className="flex-1">
+          {viewMode === 'list' && (
+            <>
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className="p-2 bg-sky-50 border border-sky-200 rounded text-center">
+                  <div className="text-[10px] text-sky-600 uppercase">Categories</div>
+                  <div className="text-lg font-bold text-sky-900">{data.length}</div>
+                </div>
+                <div className="p-2 bg-green-50 border border-green-200 rounded text-center">
+                  <div className="text-[10px] text-green-600 uppercase">Txns</div>
+                  <div className="text-lg font-bold text-green-900">
+                    {data.reduce((sum, d) => sum + d.transactionCount, 0)}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </>
+                <div className="p-2 bg-purple-50 border border-purple-200 rounded text-center">
+                  <div className="text-[10px] text-purple-600 uppercase">Value</div>
+                  <div className="text-lg font-bold text-purple-900">
+                    {data.reduce((sum, d) => sum + d.totalValue, 0).toFixed(0)}
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {data.map((cat, idx) => {
+                  const percentage = (cat.totalValue / maxValue) * 100;
+                  return (
+                    <div key={idx} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex-1">
+                          <span className="font-medium text-slate-900">{cat.categoryName}</span>
+                          <span className="text-xs text-slate-500 ml-2">({cat.transactionCount} txns)</span>
+                        </div>
+                        <span className="font-bold text-slate-900">{cat.totalValue.toFixed(0)}</span>
+                      </div>
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-sky-500 rounded-full"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {viewMode === 'bar' && (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={data} layout="vertical" margin={{ left: 10, right: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                <XAxis type="number" hide />
+                <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12}} />
+                <Tooltip 
+                  cursor={{fill: '#f1f5f9'}}
+                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
+                  formatter={(value) => value.toFixed(2)}
+                />
+                <Bar dataKey="totalValue" fill="#0ea5e9" radius={[0, 4, 4, 0]} name="Sales" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+
+          {viewMode === 'pie' && (
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={data}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="totalValue"
+                >
+                  {data.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => value.toFixed(2)} />
+                <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{fontSize: '12px'}} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </div>
       )}
     </div>
   );
@@ -163,6 +235,8 @@ export function WarehouseDistribution() {
   const api = useApi();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState(30); // Додано стейт періоду
+  const [viewMode, setViewMode] = useState('pie');
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -180,8 +254,8 @@ export function WarehouseDistribution() {
 
         if (!mounted.current) return;
 
-        // Останні 30 днів
-        const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        // Фільтруємо за вибраним періодом
+        const cutoffDate = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
         const recentIssues = ledger.filter(e => new Date(e.date_time) >= cutoffDate);
 
         const warehouseStats = {};
@@ -203,9 +277,11 @@ export function WarehouseDistribution() {
             return {
               warehouseId: parseInt(whId),
               warehouseName: warehouse?.name || `Warehouse #${whId}`,
+              name: warehouse?.name || `WH #${whId}`,
               count: stats.count,
               totalQty: stats.totalQty,
-              totalValue: stats.totalValue
+              totalValue: stats.totalValue,
+              value: stats.totalValue
             };
           })
           .sort((a, b) => b.totalValue - a.totalValue);
@@ -218,48 +294,82 @@ export function WarehouseDistribution() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [period]); // Додано залежність від period
 
   const total = data.reduce((sum, d) => sum + d.totalValue, 0);
 
   if (loading) return <div className="text-center py-4 text-slate-500">Loading warehouse stats...</div>;
 
   return (
-    <div className="card">
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold">🏢 Sales by Warehouse</h3>
-        <p className="text-sm text-slate-600">Last 30 days distribution</p>
+    <div className="card h-full flex flex-col">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-semibold">🏢 Warehouses</h3>
+          <p className="text-sm text-slate-600">Sales distribution</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <ViewToggle 
+            mode={viewMode} 
+            setMode={setViewMode} 
+            options={[{ value: 'pie', label: 'Chart' }, { value: 'list', label: 'List' }]} 
+          />
+          <PeriodSelect value={period} onChange={setPeriod} />
+        </div>
       </div>
 
       {data.length === 0 ? (
         <p className="text-slate-500 text-center py-8">No warehouse data available</p>
       ) : (
-        <div className="space-y-4">
-          {data.map((wh, idx) => {
-            const percentage = total > 0 ? (wh.totalValue / total * 100) : 0;
-            return (
-              <div key={idx} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <div className="font-semibold text-slate-900">{wh.warehouseName}</div>
-                    <div className="text-xs text-slate-500 mt-1">
-                      {wh.count} transactions • {wh.totalQty.toFixed(0)} items
+        <div className="flex-1">
+          {viewMode === 'list' ? (
+            <div className="space-y-4">
+              {data.map((wh, idx) => {
+                const percentage = total > 0 ? (wh.totalValue / total * 100) : 0;
+                return (
+                  <div key={idx} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <div className="font-semibold text-sm text-slate-900">{wh.warehouseName}</div>
+                        <div className="text-xs text-slate-500">
+                           {wh.count} txns • {wh.totalQty.toFixed(0)} items
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-bold text-slate-900">{percentage.toFixed(1)}%</div>
+                        <div className="text-xs text-slate-500">{wh.totalValue.toFixed(2)}</div>
+                      </div>
+                    </div>
+                    <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-sky-600 rounded-full"
+                        style={{ width: `${percentage}%` }}
+                      />
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-xl font-bold text-slate-900">{percentage.toFixed(1)}%</div>
-                    <div className="text-sm text-slate-600">{wh.totalValue.toFixed(2)}</div>
-                  </div>
-                </div>
-                <div className="h-3 bg-slate-200 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-sky-600 rounded-full transition-all"
-                    style={{ width: `${percentage}%` }}
-                  />
-                </div>
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie
+                  data={data}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {data.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(val) => val.toFixed(2)} />
+                <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{fontSize: '11px'}}/>
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </div>
       )}
     </div>
@@ -271,6 +381,8 @@ export function SupplierStatistics() {
   const api = useApi();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState(90); // Додано стейт періоду (default 90)
+  const [viewMode, setViewMode] = useState('list');
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -288,7 +400,8 @@ export function SupplierStatistics() {
 
         if (!mounted.current) return;
 
-        const cutoffDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+        // Фільтруємо за вибраним періодом
+        const cutoffDate = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
         const recentReceipts = receipts.filter(r => new Date(r.date) >= cutoffDate);
 
         const supplierStats = {};
@@ -319,6 +432,7 @@ export function SupplierStatistics() {
             return {
               supplierId: parseInt(suppId),
               supplierName: supplier?.name || `Supplier #${suppId}`,
+              name: supplier?.name?.substring(0, 15) || `#${suppId}`,
               deliveryCount: stats.count,
               totalValue: stats.totalValue,
               avgValue: stats.count > 0 ? stats.totalValue / stats.count : 0,
@@ -339,56 +453,77 @@ export function SupplierStatistics() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [period]); // Додано залежність від period
 
   if (loading) return <div className="text-center py-4 text-slate-500">Loading supplier statistics...</div>;
 
   return (
-    <div className="card">
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold">🚚 Top Suppliers</h3>
-        <p className="text-sm text-slate-600">Last 90 days performance</p>
+    <div className="card h-full flex flex-col">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-semibold">🚚 Top Suppliers</h3>
+          <p className="text-sm text-slate-600">Supplies analysis</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <ViewToggle 
+            mode={viewMode} 
+            setMode={setViewMode} 
+            options={[{ value: 'chart', label: 'Chart' }, { value: 'list', label: 'Table' }]} 
+          />
+          <PeriodSelect value={period} onChange={setPeriod} />
+        </div>
       </div>
 
       {data.length === 0 ? (
         <p className="text-slate-500 text-center py-8">No supplier data available</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-slate-600 border-b border-slate-200">
-              <tr>
-                <th className="py-2 pr-3">#</th>
-                <th className="py-2 pr-3">Supplier</th>
-                <th className="py-2 pr-3 text-right">Deliveries</th>
-                <th className="py-2 pr-3 text-right">Total Value</th>
-                <th className="py-2 pr-3 text-right">Avg Order</th>
-                <th className="py-2 pr-3 text-right">Last Delivery</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {data.map((supp, idx) => (
-                <tr key={idx} className="hover:bg-slate-50">
-                  <td className="py-2 pr-3 text-slate-400">{idx + 1}</td>
-                  <td className="py-2 pr-3 font-medium">{supp.supplierName}</td>
-                  <td className="py-2 pr-3 text-right">{supp.deliveryCount}</td>
-                  <td className="py-2 pr-3 text-right font-bold">{supp.totalValue.toFixed(2)}</td>
-                  <td className="py-2 pr-3 text-right">{supp.avgValue.toFixed(2)}</td>
-                  <td className="py-2 pr-3 text-right">
-                    <span className={`text-xs ${
-                      supp.daysSinceLastDelivery <= 7 ? 'text-green-600' :
-                      supp.daysSinceLastDelivery <= 30 ? 'text-slate-600' :
-                      'text-amber-600'
-                    }`}>
-                      {supp.daysSinceLastDelivery !== null 
-                        ? `${supp.daysSinceLastDelivery}d ago`
-                        : 'N/A'
-                      }
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="flex-1">
+          {viewMode === 'list' ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-slate-600 border-b border-slate-200">
+                  <tr>
+                    <th className="py-2 pr-2 font-medium">Supplier</th>
+                    <th className="py-2 pr-2 text-right font-medium">Val</th>
+                    <th className="py-2 pr-2 text-right font-medium">Last</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {data.map((supp, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="py-2 pr-2 font-medium truncate max-w-[120px]" title={supp.supplierName}>
+                        {supp.supplierName}
+                      </td>
+                      <td className="py-2 pr-2 text-right font-bold text-slate-700">
+                        {supp.totalValue.toFixed(0)}
+                      </td>
+                      <td className="py-2 pr-2 text-right">
+                        <span className={`text-xs ${
+                          supp.daysSinceLastDelivery <= 30 ? 'text-green-600' : 'text-slate-500'
+                        }`}>
+                          {supp.daysSinceLastDelivery !== null ? `${supp.daysSinceLastDelivery}d` : '-'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={data} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" tick={{fontSize: 10}} interval={0} angle={-45} textAnchor="end" height={60} />
+                <YAxis tick={{fontSize: 11}} />
+                <Tooltip 
+                  cursor={{fill: '#f8fafc'}}
+                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
+                  formatter={(value) => value.toFixed(2)}
+                />
+                <Bar dataKey="totalValue" fill="#8b5cf6" radius={[4, 4, 0, 0]} name="Value" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       )}
     </div>
@@ -400,6 +535,8 @@ export function TopCustomers() {
   const api = useApi();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState(90); // Додано стейт періоду (default 90)
+  const [viewMode, setViewMode] = useState('list');
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -417,7 +554,8 @@ export function TopCustomers() {
 
         if (!mounted.current) return;
 
-        const cutoffDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+        // Фільтруємо за вибраним періодом
+        const cutoffDate = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
         const recentIssues = issues.filter(i => new Date(i.date) >= cutoffDate);
 
         const clientStats = {};
@@ -447,6 +585,7 @@ export function TopCustomers() {
             return {
               clientId: parseInt(clientId),
               clientName: client?.name || `Client #${clientId}`,
+              name: client?.name?.substring(0, 15) || `#${clientId}`,
               orderCount: stats.count,
               totalValue: stats.totalValue,
               avgOrder: stats.count > 0 ? stats.totalValue / stats.count : 0,
@@ -467,71 +606,99 @@ export function TopCustomers() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [period]); // Додано залежність від period
 
   const totalRevenue = data.reduce((sum, d) => sum + d.totalValue, 0);
 
   if (loading) return <div className="text-center py-4 text-slate-500">Loading customer statistics...</div>;
 
   return (
-    <div className="card">
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold">⭐ Top Customers</h3>
-        <p className="text-sm text-slate-600">Last 90 days by revenue</p>
+    <div className="card h-full flex flex-col">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-semibold">⭐ Top Customers</h3>
+          <p className="text-sm text-slate-600">Revenue</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <ViewToggle 
+            mode={viewMode} 
+            setMode={setViewMode} 
+            options={[{ value: 'chart', label: 'Chart' }, { value: 'list', label: 'List' }]} 
+          />
+          <PeriodSelect value={period} onChange={setPeriod} />
+        </div>
       </div>
 
       {data.length === 0 ? (
         <p className="text-slate-500 text-center py-8">No customer data available</p>
       ) : (
-        <>
-          <div className="mb-6 p-4 bg-linear-to-r from-sky-50 to-purple-50 border border-sky-200 rounded-lg">
-            <div className="text-sm text-slate-600">Total Revenue (Top 10)</div>
-            <div className="text-3xl font-bold text-slate-900">{totalRevenue.toFixed(2)}</div>
-            <div className="text-xs text-slate-500 mt-1">
-              {data.reduce((sum, d) => sum + d.orderCount, 0)} orders total
-            </div>
-          </div>
+        <div className="flex-1">
+          {viewMode === 'list' ? (
+            <>
+              <div className="mb-4 p-3 bg-linear-to-r from-sky-50 to-purple-50 border border-sky-200 rounded-lg">
+                <div className="text-xs text-slate-600">Total Revenue (Top 10)</div>
+                <div className="text-2xl font-bold text-slate-900">{totalRevenue.toFixed(0)}</div>
+                <div className="text-[10px] text-slate-500 mt-1">
+                  {data.reduce((sum, d) => sum + d.orderCount, 0)} orders total
+                </div>
+              </div>
 
-          <div className="space-y-3">
-            {data.map((client, idx) => {
-              const share = totalRevenue > 0 ? (client.totalValue / totalRevenue * 100) : 0;
-              return (
-                <div key={idx} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center text-sm font-bold text-slate-600">
-                        {idx + 1}
-                      </div>
-                      <div>
-                        <div className="font-medium text-slate-900">{client.clientName}</div>
-                        <div className="text-xs text-slate-500">
-                          {client.orderCount} orders • Avg: {client.avgOrder.toFixed(2)}
+              <div className="space-y-3">
+                {data.map((client, idx) => {
+                  const share = totalRevenue > 0 ? (client.totalValue / totalRevenue * 100) : 0;
+                  return (
+                    <div key={idx} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 bg-slate-200 rounded-full flex items-center justify-center text-xs font-bold text-slate-600">
+                            {idx + 1}
+                          </div>
+                          <div className="overflow-hidden">
+                            <div className="font-medium text-sm text-slate-900 truncate max-w-[120px]">{client.clientName}</div>
+                            <div className="text-[10px] text-slate-500">
+                              {client.orderCount} ord • Avg: {client.avgOrder.toFixed(0)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold text-sm text-slate-900">{client.totalValue.toFixed(0)}</div>
+                          <div className="text-[10px] text-slate-500">{share.toFixed(1)}%</div>
                         </div>
                       </div>
+                      <div className="flex items-center justify-between text-[10px] text-slate-500">
+                        <span>Last purchase:</span>
+                        <span className={
+                          client.daysSinceLastPurchase <= 7 ? 'text-green-600 font-medium' :
+                          client.daysSinceLastPurchase <= 30 ? 'text-slate-600' :
+                          'text-amber-600'
+                        }>
+                          {client.daysSinceLastPurchase !== null 
+                            ? `${client.daysSinceLastPurchase}d ago`
+                            : 'N/A'
+                          }
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-bold text-slate-900">{client.totalValue.toFixed(2)}</div>
-                      <div className="text-xs text-slate-500">{share.toFixed(1)}%</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-slate-500">
-                    <span>Last purchase:</span>
-                    <span className={
-                      client.daysSinceLastPurchase <= 7 ? 'text-green-600 font-medium' :
-                      client.daysSinceLastPurchase <= 30 ? 'text-slate-600' :
-                      'text-amber-600'
-                    }>
-                      {client.daysSinceLastPurchase !== null 
-                        ? `${client.daysSinceLastPurchase} days ago`
-                        : 'N/A'
-                      }
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={data} layout="vertical" margin={{ left: 0, right: 10, top: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" hide />
+                <YAxis dataKey="name" type="category" width={90} tick={{fontSize: 11}} />
+                <Tooltip 
+                  cursor={{fill: '#f8fafc'}}
+                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
+                  formatter={(value) => value.toFixed(2)}
+                />
+                <Bar dataKey="totalValue" fill="#ec4899" radius={[0, 4, 4, 0]} barSize={20} name="Revenue" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
       )}
     </div>
   );
